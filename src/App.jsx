@@ -1,7 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Layout, Tabs, Button, message, Tooltip } from 'antd';
-import { Editor } from '@monaco-editor/react';
-import ReactECharts from 'echarts-for-react';
 import { debounce } from 'lodash';
 import * as echarts from 'echarts';
 import {
@@ -10,77 +8,26 @@ import {
   PictureOutlined,
 } from '@ant-design/icons';
 
+import CodeEditor from './components/CodeEditor';
+import ChartView from './components/ChartView';
+import { defaultCode } from './constants/defaultCode';
+
 const { Content } = Layout;
 
-
-// 默认示例代码
-const defaultCode = `// myChart 是当前图表实例，可以直接调用 ECharts 的实例方法
-// echarts 是 ECharts 库的引用，可以访问其所有静态方法和对象
-
-// 创建图表配置项
-var option = {
-  // 标题配置
-  title: {
-    text: 'ECharts 示例',
-    subtext: '演示 myChart 和 echarts 的使用'
-  },
-  // 提示框配置
-  tooltip: {
-    trigger: 'axis'
-  },
-  // X轴配置
-  xAxis: {
-    type: 'category',
-    data: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  },
-  // Y轴配置
-  yAxis: {
-    type: 'value'
-  },
-  // 系列列表
-  series: [{
-    data: [120, 200, 150, 80, 70, 110, 130],
-    type: 'bar',
-    showBackground: true,
-    backgroundStyle: {
-      color: 'rgba(180, 180, 180, 0.2)'
-    }
-  }]
-};
-
-// 使用 setOption 设置图表配置
-myChart.setOption(option);
-
-// 示例：使用 myChart 添加点击事件监听
-myChart.on('click', function(params) {
-  // params 包含了点击位置的数据信息
-  console.log('点击了数据：', params.data);
-});
-
-// 示例：使用 echarts 的内置颜色主题
-console.log('内置颜色主题：', echarts.color);
-
-/* 
-更多 myChart 实例方法：
-- myChart.setOption(option): 设置图表配置项
-- myChart.resize(): 重置图表大小
-- myChart.showLoading(): 显示加载动画
-- myChart.hideLoading(): 隐藏加载动画
-- myChart.clear(): 清空图表内容
-- myChart.getDataURL(): 获取图表的图片URL
-
-更多 echarts 全局方法：
-- echarts.init(dom): 初始化图表
-- echarts.registerTheme(): 注册主题
-- echarts.registerMap(): 注册地图数据
-- echarts.connect(): 关联多个图表
-*/
-`;
-
+/**
+ * ECharts 沙盒应用主组件
+ * 集成了代码编辑器和图表预览功能
+ */
 function App() {
+  // 存储当前编辑器代码
   const [code, setCode] = useState(defaultCode);
+  // 存储 ECharts 实例的引用
   const echartsRef = useRef(null);
 
+  /**
+   * 防抖处理的代码执行函数
+   * 将编辑器代码转换为可执行的函数并运行
+   */
   const debouncedRunCode = useRef(
     debounce((codeToRun) => {
       try {
@@ -89,6 +36,7 @@ function App() {
           throw new Error('图表实例未初始化');
         }
 
+        // 创建可执行函数，传入 myChart 和 echarts 实例
         const runCode = new Function('myChart', 'echarts', codeToRun);
         runCode(myChart, echarts);
       } catch (error) {
@@ -97,22 +45,36 @@ function App() {
     }, 300)
   ).current;
 
+  /**
+   * 处理编辑器内容变化
+   * 更新代码状态并执行新代码
+   */
   const handleEditorChange = useCallback((value) => {
     setCode(value);
     debouncedRunCode(value);
   }, []);
 
+  /**
+   * 重新执行当前代码
+   */
   const handleRerun = useCallback(() => {
     debouncedRunCode(code);
     message.success('代码已重新运行');
   }, [code]);
 
+  /**
+   * 复制当前编辑器代码到剪贴板
+   */
   const handleCopyCode = useCallback(() => {
     navigator.clipboard.writeText(code).then(() => {
       message.success('代码已复制到剪贴板');
     });
   }, [code]);
 
+  /**
+   * 将当前图表保存为图片
+   * 使用 ECharts 的 getDataURL 方法导出高质量图片
+   */
   const handleSaveImage = useCallback(() => {
     try {
       const myChart = echartsRef.current?.getEchartsInstance();
@@ -120,12 +82,14 @@ function App() {
         throw new Error('图表实例未初始化');
       }
 
+      // 获取图表的 base64 图片 URL
       const url = myChart.getDataURL({
         type: 'jpeg',
-        pixelRatio: 2,
+        pixelRatio: 2, // 设置 2 倍分辨率
         backgroundColor: '#fff'
       });
 
+      // 创建并触发下载
       const link = document.createElement('a');
       link.download = `echarts-${new Date().getTime()}.jpg`;
       link.href = url;
@@ -139,10 +103,12 @@ function App() {
     }
   }, []);
 
+  /**
+   * 组件挂载时执行默认代码
+   * 组件卸载时取消未执行的防抖函数
+   */
   useEffect(() => {
-    // 初始运行代码
     debouncedRunCode(defaultCode);
-    
     return () => {
       debouncedRunCode.cancel();
     };
@@ -150,6 +116,7 @@ function App() {
 
   return (
     <Layout style={{ height: '100vh', background: '#fff' }}>
+      {/* 顶部工具栏 */}
       <div style={{ 
         padding: '12px 20px', 
         borderBottom: '1px solid #ddd',
@@ -170,7 +137,9 @@ function App() {
           </Tooltip>
         </div>
       </div>
+      {/* 主要内容区域 */}
       <Content style={{ display: 'flex', height: 'calc(100vh - 57px)' }}>
+        {/* 左侧编辑器区域 */}
         <div style={{ width: '50%', borderRight: '1px solid #ddd', display: 'flex', flexDirection: 'column' }}>
           <Tabs 
             defaultActiveKey="code" 
@@ -189,39 +158,13 @@ function App() {
               {
                 key: 'code',
                 label: '代码编辑',
-                children: (
-                  <div style={{ 
-                    flex: 1, 
-                    height: 'calc(100vh - 110px)',
-                    position: 'relative'
-                  }}>
-                    <Editor
-                      height="100%"
-                      defaultLanguage="javascript"
-                      value={code}
-                      onChange={handleEditorChange}
-                      theme="light"
-                      options={{
-                        minimap: { enabled: false },
-                        fontSize: 14,
-                        scrollBeyondLastLine: false,
-                        automaticLayout: true,
-                        padding: { top: 10 }
-                      }}
-                    />
-                  </div>
-                ),
+                children: <CodeEditor code={code} onChange={handleEditorChange} />
               }
             ]}
           />
         </div>
-        <div style={{ flex: 1, padding: '20px' }}>
-          <ReactECharts
-            ref={echartsRef}
-            option={{}}
-            style={{ height: '100%' }}
-          />
-        </div>
+        {/* 右侧图表预览区域 */}
+        <ChartView echartsRef={echartsRef} />
       </Content>
     </Layout>
   );
